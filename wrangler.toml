@@ -1,5 +1,5 @@
 name = "yumipay"
-main = "dist/server/server.js"
+main = "src/server.ts"
 compatibility_date = "2026-05-19"
 
 [assets]
