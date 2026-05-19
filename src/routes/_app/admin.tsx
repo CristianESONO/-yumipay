@@ -18,7 +18,9 @@ import {
   Download,
   Filter,
   UserPlus,
-  LogOut
+  LogOut,
+  Wallet,
+  PlusCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatXAF } from "@/lib/format";
@@ -29,11 +31,15 @@ export const Route = createFileRoute("/_app/admin")({
 
 function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'audit' | 'reversals'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'audit' | 'reversals' | 'agents'>('overview');
   const [auditFilter, setAuditFilter] = useState<'all' | 'p2p' | 'deposit' | 'system'>('all');
   const [requests, setRequests] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [reversals, setReversals] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<string>('');
+  const [topUpAmount, setTopUpAmount] = useState<string>('');
+  const [topUpLoading, setTopUpLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -85,10 +91,41 @@ function AdminPage() {
           .order("reversal_requested_at", { ascending: false });
         setReversals(data || []);
       }
+
+      if (activeTab === 'agents') {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone, agent_balance_xaf, balance_xaf")
+          .eq("role", "agent")
+          .order("full_name", { ascending: true });
+        setAgents(data || []);
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTopUp() {
+    if (!selectedAgent) return toast.error("Selecciona un agente");
+    const amount = Number(topUpAmount);
+    if (!amount || amount <= 0) return toast.error("Introduce un monto válido");
+    setTopUpLoading(true);
+    try {
+      const { error } = await supabase.rpc("admin_top_up_agent", {
+        p_agent_id: selectedAgent,
+        p_amount: amount,
+      });
+      if (error) throw error;
+      toast.success(`Float recargado con ${formatXAF(amount)}`);
+      setTopUpAmount('');
+      setSelectedAgent('');
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || "Error al recargar el float");
+    } finally {
+      setTopUpLoading(false);
     }
   }
 
@@ -122,6 +159,7 @@ function AdminPage() {
         <nav className="flex-1 px-4 space-y-1 mt-4">
           <SidebarLink active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<LayoutDashboard size={20}/>} label="Panel General" />
           <SidebarLink active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} icon={<UserPlus size={20}/>} label="Solicitudes" count={requests.length} />
+          <SidebarLink active={activeTab === 'agents'} onClick={() => setActiveTab('agents')} icon={<Wallet size={20}/>} label="Recargar Agentes" />
           <SidebarLink active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} icon={<History size={20}/>} label="Auditoría Global" />
           <SidebarLink active={activeTab === 'reversals'} onClick={() => setActiveTab('reversals')} icon={<AlertTriangle size={20}/>} label="Reclamaciones" count={reversals.length} />
         </nav>
@@ -149,6 +187,7 @@ function AdminPage() {
           <h2 className="text-sm font-bold text-slate-600 uppercase tracking-tight">
             {activeTab === 'overview' && "Resumen Ejecutivo"}
             {activeTab === 'requests' && "Gestión de Agentes"}
+            {activeTab === 'agents' && "Recargar Float de Agentes"}
             {activeTab === 'audit' && "Auditoría de Transacciones"}
             {activeTab === 'reversals' && "Resolución de Disputas"}
           </h2>
@@ -241,6 +280,86 @@ function AdminPage() {
               </div>
             )}
           </div>
+
+          {activeTab === 'agents' && (
+            <div className="p-6 space-y-6">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 className="font-display font-bold text-slate-800 mb-1">Recargar Float de Agente</h3>
+                <p className="text-xs text-slate-400 mb-6">Aumenta el saldo de caja (Float) de un agente para que pueda realizar depósitos a clientes.</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                  <div className="md:col-span-1">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">Agente</label>
+                    <select
+                      value={selectedAgent}
+                      onChange={(e) => setSelectedAgent(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                    >
+                      <option value="">Seleccionar agente...</option>
+                      {agents.map(a => (
+                        <option key={a.id} value={a.id}>{a.full_name} ({a.phone})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-2">Monto (XAF)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Ej: 50000"
+                      value={topUpAmount}
+                      onChange={(e) => setTopUpAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={handleTopUp}
+                    disabled={topUpLoading}
+                    className="flex items-center justify-center gap-2 h-11 px-6 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors disabled:opacity-60"
+                  >
+                    {topUpLoading ? <Loader2 size={16} className="animate-spin" /> : <PlusCircle size={16} />}
+                    Recargar Float
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100">
+                  <h3 className="font-display font-bold text-slate-800">Estado de Agentes</h3>
+                </div>
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Agente</th>
+                      <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Saldo Personal</th>
+                      <th className="px-6 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Float (Caja)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {agents.map(a => (
+                      <tr key={a.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 text-primary grid place-items-center font-bold text-xs">{a.full_name?.charAt(0)}</div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-700">{a.full_name}</p>
+                              <p className="text-[10px] text-slate-400">{a.phone}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right text-xs font-semibold text-slate-600">{formatXAF(a.balance_xaf)}</td>
+                        <td className="px-6 py-4 text-right">
+                          <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">{formatXAF(a.agent_balance_xaf || 0)}</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {agents.length === 0 && (
+                      <tr><td colSpan={3} className="px-6 py-12 text-center text-sm text-slate-400 italic">No hay agentes activos.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
