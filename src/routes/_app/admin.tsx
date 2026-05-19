@@ -31,7 +31,8 @@ export const Route = createFileRoute("/_app/admin")({
 
 function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'overview' | 'requests' | 'audit' | 'reversals' | 'agents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'requests' | 'audit' | 'reversals' | 'agents'>('overview');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [auditFilter, setAuditFilter] = useState<'all' | 'p2p' | 'deposit' | 'system'>('all');
   const [requests, setRequests] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -100,6 +101,14 @@ function AdminPage() {
           .order("full_name", { ascending: true });
         setAgents(data || []);
       }
+
+      if (activeTab === 'users') {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone, role, agent_status, balance_xaf, agent_balance_xaf, created_at")
+          .order("created_at", { ascending: false });
+        setAllUsers(data || []);
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
@@ -158,6 +167,7 @@ function AdminPage() {
         
         <nav className="flex-1 px-4 space-y-1 mt-4">
           <SidebarLink active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<LayoutDashboard size={20}/>} label="Panel General" />
+          <SidebarLink active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users size={20}/>} label="Todos los Usuarios" />
           <SidebarLink active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} icon={<UserPlus size={20}/>} label="Solicitudes" count={requests.length} />
           <SidebarLink active={activeTab === 'agents'} onClick={() => setActiveTab('agents')} icon={<Wallet size={20}/>} label="Recargar Agentes" />
           <SidebarLink active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} icon={<History size={20}/>} label="Auditoría Global" />
@@ -186,6 +196,7 @@ function AdminPage() {
         <header className="h-16 border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-30">
           <h2 className="text-sm font-bold text-slate-600 uppercase tracking-tight">
             {activeTab === 'overview' && "Resumen Ejecutivo"}
+            {activeTab === 'users' && "Todos los Usuarios"}
             {activeTab === 'requests' && "Gestión de Agentes"}
             {activeTab === 'agents' && "Recargar Float de Agentes"}
             {activeTab === 'audit' && "Auditoría de Transacciones"}
@@ -225,6 +236,71 @@ function AdminPage() {
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'users' && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50">
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Usuario</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Teléfono</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rol</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Saldo</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Registro</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {allUsers.map(u => {
+                      const roleColors: Record<string, string> = {
+                        admin: 'bg-purple-50 text-purple-700',
+                        agent: 'bg-blue-50 text-blue-700',
+                        client: 'bg-slate-100 text-slate-600',
+                      };
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-primary/10 text-primary grid place-items-center font-bold text-xs">
+                                {u.full_name?.charAt(0) || '?'}
+                              </div>
+                              <p className="text-xs font-bold text-slate-700">{u.full_name || '—'}</p>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-500">{u.phone || '—'}</td>
+                          <td className="px-6 py-4">
+                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full capitalize ${roleColors[u.role] || 'bg-slate-100 text-slate-500'}`}>
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {u.role === 'agent' ? (
+                              <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${
+                                u.agent_status === 'approved' ? 'bg-emerald-50 text-emerald-700' :
+                                u.agent_status === 'pending' ? 'bg-amber-50 text-amber-700' :
+                                'bg-red-50 text-red-700'
+                              }`}>{u.agent_status || 'pending'}</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <p className="text-xs font-black text-slate-800">{formatXAF(u.balance_xaf || 0)}</p>
+                            {u.role === 'agent' && u.agent_balance_xaf > 0 && (
+                              <p className="text-[10px] text-emerald-600 font-semibold">Float: {formatXAF(u.agent_balance_xaf)}</p>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-[10px] text-slate-400">{new Date(u.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      );
+                    })}
+                    {allUsers.length === 0 && (
+                      <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-400 italic">No se encontraron usuarios.</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
 
