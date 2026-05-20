@@ -142,7 +142,7 @@ function ProfilePage() {
             <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
               Como agente de CCEI Bank, podrás realizar recargas y retiros para otros clientes y ganar comisiones.
             </p>
-            {profile.agent_status === "none" || profile.agent_status === "rejected" ? (
+            {(!profile.agent_status || profile.agent_status === "none" || profile.agent_status === "rejected") ? (
               <button
                 onClick={async () => {
                   setLoading(true);
