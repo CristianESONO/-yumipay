@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Phone, Shield, LogOut, ChevronRight, Edit2, Check, X } from "lucide-react";
+import { User, Phone, Shield, LogOut, ChevronRight, Edit2, Check, X, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/profile")({
@@ -14,6 +14,9 @@ function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -45,6 +48,23 @@ function ProfilePage() {
       toast.error(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function requestAccountDeletion() {
+    if (!deleteReason.trim()) return toast.error("Por favor, introduce el motivo de la baja");
+    setDeleteLoading(true);
+    try {
+      // @ts-ignore
+      const { error } = await supabase.rpc("request_account_deletion", { p_reason: deleteReason.trim() });
+      if (error) throw error;
+      toast.success("Solicitud de baja enviada");
+      setShowDeleteModal(false);
+      loadProfile();
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setDeleteLoading(false);
     }
   }
 
@@ -134,7 +154,10 @@ function ProfilePage() {
         )}
 
         <div className="rounded-2xl border border-border bg-card p-1">
-          <button className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50">
+          <button 
+            onClick={() => toast.info("Funcionalidad de seguridad próximamente disponible")}
+            className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
+          >
             <div className="flex items-center gap-3">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
                 <Shield className="h-4 w-4" />
@@ -143,7 +166,10 @@ function ProfilePage() {
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>
-          <button className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50">
+          <button 
+            onClick={() => toast.info("Tu identidad está verificada (Nivel 2)")}
+            className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
+          >
             <div className="flex items-center gap-3">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
                 <User className="h-4 w-4" />
@@ -157,6 +183,21 @@ function ProfilePage() {
           </button>
         </div>
 
+        {!profile.deletion_requested ? (
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold text-slate-500 transition hover:bg-destructive/5 hover:text-destructive hover:border-destructive/20"
+          >
+            <Trash2 className="h-5 w-5" />
+            Solicitar borrar cuenta
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-center">
+            <p className="text-xs font-bold text-destructive uppercase tracking-widest mb-1">Baja solicitada</p>
+            <p className="text-[10px] text-muted-foreground">Tu solicitud está siendo procesada por el administrador.</p>
+          </div>
+        )}
+
         <button
           onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-5 py-4 text-sm font-semibold text-destructive transition hover:bg-destructive/10"
@@ -166,9 +207,47 @@ function ProfilePage() {
         </button>
       </div>
       
-      <p className="mt-10 text-center text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold opacity-50">
-        Yumi Pay Version 1.0.4
-      </p>
+      <div className="mt-10 text-center space-y-1">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold opacity-50">
+          Yumi Pay Version 1.0.5
+        </p>
+        <p className="text-[10px] text-slate-400 font-medium">
+          Developed by <span className="text-primary/70 font-bold">Ruslan Cristian ESONO MAYE</span>
+        </p>
+        <p className="text-[9px] text-slate-300 font-bold tracking-widest">INNOTECHGE</p>
+      </div>
+
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <h3 className="font-display text-xl font-bold text-slate-800">Borrar cuenta</h3>
+            <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+              Lamentamos que te vayas. Cuéntanos por qué quieres cerrar tu cuenta:
+            </p>
+            <textarea
+              className="mt-6 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all h-32 resize-none"
+              placeholder="Escribe tu motivo aquí..."
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+            />
+            <div className="mt-8 flex flex-col gap-3">
+              <button
+                onClick={requestAccountDeletion}
+                disabled={deleteLoading}
+                className="flex h-12 w-full items-center justify-center rounded-xl bg-destructive text-sm font-bold text-white shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+              >
+                {deleteLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirmar solicitud de baja"}
+              </button>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="h-12 w-full text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

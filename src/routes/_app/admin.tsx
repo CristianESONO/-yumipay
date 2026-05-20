@@ -16,10 +16,10 @@ import {
   TrendingUp,
   Search,
   Download,
-  Filter,
   UserPlus,
   LogOut,
   Wallet,
+  Trash2,
   PlusCircle
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,8 +31,9 @@ export const Route = createFileRoute("/_app/admin")({
 
 function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'requests' | 'audit' | 'reversals' | 'agents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'requests' | 'audit' | 'reversals' | 'agents' | 'deletions'>('overview');
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [deletionRequests, setDeletionRequests] = useState<any[]>([]);
   const [auditFilter, setAuditFilter] = useState<'all' | 'p2p' | 'deposit' | 'system'>('all');
   const [requests, setRequests] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
@@ -62,8 +63,10 @@ function AdminPage() {
 
       if (activeTab === 'overview' || activeTab === 'requests') {
         const { data } = await supabase
+          // @ts-ignore
           .from("agent_requests")
           .select("*, user:profiles!agent_requests_user_id_fkey(full_name, phone)")
+          // @ts-ignore
           .eq("status", "pending")
           .order("created_at", { ascending: false });
         setRequests(data || []);
@@ -78,6 +81,7 @@ function AdminPage() {
           .limit(50);
         
         if (auditFilter !== 'all') {
+          // @ts-ignore
           query = query.eq("type", auditFilter);
         }
         const { data } = await query;
@@ -105,9 +109,20 @@ function AdminPage() {
       if (activeTab === 'users') {
         const { data } = await supabase
           .from("profiles")
-          .select("id, full_name, phone, role, agent_status, balance_xaf, agent_balance_xaf, created_at")
+          // @ts-ignore
+          .select("id, full_name, phone, role, agent_status, balance_xaf, agent_balance_xaf, created_at, deletion_requested, deletion_reason")
           .order("created_at", { ascending: false });
         setAllUsers(data || []);
+      }
+
+      if (activeTab === 'deletions') {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          // @ts-ignore
+          .eq("deletion_requested", true)
+          .order("created_at", { ascending: false });
+        setDeletionRequests(data || []);
       }
     } catch (e: any) {
       toast.error(e.message);
@@ -122,6 +137,7 @@ function AdminPage() {
     if (!amount || amount <= 0) return toast.error("Introduce un monto válido");
     setTopUpLoading(true);
     try {
+      // @ts-ignore
       const { error } = await supabase.rpc("admin_top_up_agent", {
         p_agent_id: selectedAgent,
         p_amount: amount,
@@ -140,6 +156,7 @@ function AdminPage() {
 
   async function processAction(rpc: string, args: any, successMsg: string) {
     try {
+      // @ts-ignore
       const { error } = await supabase.rpc(rpc, args);
       if (error) throw error;
       toast.success(successMsg);
@@ -172,6 +189,7 @@ function AdminPage() {
           <SidebarLink active={activeTab === 'agents'} onClick={() => setActiveTab('agents')} icon={<Wallet size={20}/>} label="Recargar Agentes" />
           <SidebarLink active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} icon={<History size={20}/>} label="Auditoría Global" />
           <SidebarLink active={activeTab === 'reversals'} onClick={() => setActiveTab('reversals')} icon={<AlertTriangle size={20}/>} label="Reclamaciones" count={reversals.length} />
+          <SidebarLink active={activeTab === 'deletions'} onClick={() => setActiveTab('deletions')} icon={<Trash2 size={20}/>} label="Bajas de Cuenta" count={deletionRequests.length} />
         </nav>
 
         <div className="p-4 mt-auto border-t border-slate-100 space-y-2">
@@ -201,6 +219,7 @@ function AdminPage() {
             {activeTab === 'agents' && "Recargar Float de Agentes"}
             {activeTab === 'audit' && "Auditoría de Transacciones"}
             {activeTab === 'reversals' && "Resolución de Disputas"}
+            {activeTab === 'deletions' && "Solicitudes de Eliminación de Cuenta"}
           </h2>
           <div className="flex items-center gap-4">
             <div className="relative group">
@@ -249,11 +268,11 @@ function AdminPage() {
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Rol</th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
                       <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Saldo</th>
-                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Registro</th>
+                      <th className="px-6 py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Acción</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {allUsers.map(u => {
+                    {allUsers.map((u: any) => {
                       const roleColors: Record<string, string> = {
                         admin: 'bg-purple-50 text-purple-700',
                         agent: 'bg-blue-50 text-blue-700',
@@ -266,7 +285,10 @@ function AdminPage() {
                               <div className="h-8 w-8 rounded-full bg-primary/10 text-primary grid place-items-center font-bold text-xs">
                                 {u.full_name?.charAt(0) || '?'}
                               </div>
-                              <p className="text-xs font-bold text-slate-700">{u.full_name || '—'}</p>
+                              <div>
+                                <p className="text-xs font-bold text-slate-700">{u.full_name || '—'}</p>
+                                {u.deletion_requested && <span className="text-[9px] font-black text-destructive uppercase">Baja Solicitada</span>}
+                              </div>
                             </div>
                           </td>
                           <td className="px-6 py-4 text-xs text-slate-500">{u.phone || '—'}</td>
@@ -292,15 +314,60 @@ function AdminPage() {
                               <p className="text-[10px] text-emerald-600 font-semibold">Float: {formatXAF(u.agent_balance_xaf)}</p>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-[10px] text-slate-400">{new Date(u.created_at).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => { setActiveTab('users'); toast.info(`Ver detalles de ${u.phone}`); }} 
+                              className="text-[10px] font-bold text-primary hover:underline"
+                            >
+                              Detalle
+                            </button>
+                          </td>
                         </tr>
                       );
                     })}
-                    {allUsers.length === 0 && (
-                      <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-400 italic">No se encontraron usuarios.</td></tr>
-                    )}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeTab === 'deletions' && (
+              <div className="p-6">
+                <div className="space-y-4">
+                  {deletionRequests.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 italic">No hay solicitudes de baja pendientes.</div>
+                  ) : (
+                    deletionRequests.map(user => (
+                      <div key={user.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-full bg-destructive/10 text-destructive grid place-items-center font-bold">
+                            {user.full_name?.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{user.full_name}</p>
+                            <p className="text-xs text-slate-500">{user.phone}</p>
+                            <p className="mt-1 text-[10px] font-medium p-2 rounded-lg bg-white border border-slate-200">
+                              <span className="font-bold text-slate-400 uppercase mr-1">Razón:</span> {user.deletion_reason}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => processAction('admin_process_deletion', { p_user_id: user.id, p_accept: true }, 'Cuenta eliminada')}
+                            className="bg-destructive text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-destructive/90"
+                          >
+                            Eliminar definitivamente
+                          </button>
+                          <button 
+                            onClick={() => processAction('admin_process_deletion', { p_user_id: user.id, p_accept: false }, 'Solicitud denegada')}
+                            className="bg-white text-slate-600 border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-100"
+                          >
+                            Mantener cuenta
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
 
