@@ -59,7 +59,7 @@ function SendPage() {
     try {
       const { error } = await supabase.rpc("send_money", {
         p_recipient_phone: phone.trim(),
-        p_amount: Number(amount),
+        p_amount: Math.floor(Number(amount)),
         p_note: note.trim() || undefined,
       });
       if (error) throw error;

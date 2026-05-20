@@ -59,7 +59,7 @@ create trigger on_auth_user_created
 -- Transfer function (atomic)
 create or replace function public.send_money(
   p_recipient_phone text,
-  p_amount bigint,
+  p_amount numeric,
   p_note text default null
 )
 returns public.transactions
@@ -70,7 +70,7 @@ as $$
 declare
   v_sender uuid := auth.uid();
   v_recipient uuid;
-  v_sender_balance bigint;
+  v_sender_balance numeric;
   v_tx public.transactions;
 begin
   if v_sender is null then
@@ -104,4 +104,4 @@ begin
 end;
 $$;
 
-grant execute on function public.send_money(text, bigint, text) to authenticated;
+grant execute on function public.send_money(text, numeric, text) to authenticated;

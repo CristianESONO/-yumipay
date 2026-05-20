@@ -27,14 +27,21 @@ function QRPage() {
     });
   }, []);
 
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
   useEffect(() => {
     if (tab === "scan") {
+      setCameraError(null);
       const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
       scanner.render((decodedText) => {
         scanner.clear();
         navigate({ to: "/send", search: { to: decodedText } });
       }, (error) => {
-        // console.warn(error);
+        // Many non-critical errors pass through here (like no QR found in frame)
+        // We only want to track critical failures like permission denied
+        if (error?.includes("NotAllowedError") || error?.includes("Permission denied")) {
+          setCameraError("Permiso de cámara denegado. Por favor, actívalo en tu navegador.");
+        }
       });
       return () => {
         try {
@@ -104,6 +111,12 @@ function QRPage() {
         ) : (
           <div className="flex flex-col items-center">
             <div id="reader" className="w-full overflow-hidden rounded-3xl border-2 border-dashed border-primary/30 bg-accent/30 min-h-[300px]"></div>
+            {cameraError && (
+              <div className="mt-4 p-4 rounded-xl bg-destructive/10 text-destructive text-xs font-semibold flex items-center gap-2">
+                <X className="h-4 w-4" />
+                {cameraError}
+              </div>
+            )}
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Apunta la cámara al código QR del destinatario.
             </p>
