@@ -28,7 +28,16 @@ function ProfilePage() {
   async function loadProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    
+    if (error || !data) {
+      console.error("Error al cargar perfil:", error);
+      toast.error("Tu sesión ha expirado o el perfil ha sido eliminado.");
+      await supabase.auth.signOut();
+      navigate({ to: "/auth" });
+      return;
+    }
+
     setProfile(data);
     setNewName(data.full_name);
   }
