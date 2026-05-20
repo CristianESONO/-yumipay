@@ -30,27 +30,47 @@ function QRPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   useEffect(() => {
+    let html5QrCode: Html5Qrcode | null = null;
+
     if (tab === "scan") {
       setCameraError(null);
-      const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-      scanner.render((decodedText) => {
-        scanner.clear();
-        navigate({ to: "/send", search: { to: decodedText } });
-      }, (error) => {
-        // Many non-critical errors pass through here (like no QR found in frame)
-        // We only want to track critical failures like permission denied
-        if (error?.includes("NotAllowedError") || error?.includes("Permission denied")) {
-          setCameraError("Permiso de cámara denegado. Por favor, actívalo en tu navegador.");
-        }
-      });
-      return () => {
+      html5QrCode = new Html5Qrcode("reader");
+
+      const startScanner = async () => {
         try {
-          scanner.clear();
-        } catch (e) {
-          // console.error(e);
+          await html5QrCode?.start(
+            { facingMode: "environment" },
+            {
+              fps: 10,
+              qrbox: { width: 250, height: 250 },
+            },
+            (decodedText) => {
+              html5QrCode?.stop().then(() => {
+                navigate({ to: "/send", search: { to: decodedText } });
+              });
+            },
+            () => {
+              // Ignore failure to detect QR in a frame
+            }
+          );
+        } catch (err: any) {
+          console.error("Camera error:", err);
+          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            setCameraError("Permiso de cámara denegado. Por favor, actívalo en tu navegador.");
+          } else {
+            setCameraError("No se pudo acceder a la cámara. Verifica que no esté en uso por otra app.");
+          }
         }
       };
+
+      startScanner();
     }
+
+    return () => {
+      if (html5QrCode?.isScanning) {
+        html5QrCode.stop().catch(e => console.error("Error stopping scanner", e));
+      }
+    };
   }, [tab, navigate]);
 
   return (
