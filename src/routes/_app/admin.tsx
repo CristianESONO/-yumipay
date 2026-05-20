@@ -330,6 +330,46 @@ function AdminPage() {
               </div>
             )}
 
+            {activeTab === 'requests' && (
+              <div className="p-6">
+                <div className="space-y-4">
+                  <h3 className="font-display font-bold text-slate-800 mb-4">Solicitudes de Agente Pendientes</h3>
+                  {requests.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 italic">No hay solicitudes de agente pendientes.</div>
+                  ) : (
+                    requests.map(req => (
+                      <div key={req.id} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 border border-slate-100 shadow-sm">
+                        <div className="flex items-center gap-4">
+                          <div className="h-12 w-12 rounded-full bg-primary/10 text-primary grid place-items-center font-bold">
+                            {req.user?.full_name?.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-800">{req.user?.full_name}</p>
+                            <p className="text-xs text-slate-500">{req.user?.phone}</p>
+                            <p className="text-[10px] text-slate-400 mt-1">Recibido el {new Date(req.created_at).toLocaleDateString()}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={() => processAction("process_agent_request", { p_request_id: req.id, p_approve: true, p_note: "Aprobado" }, "Agente aprobado")}
+                            className="bg-primary text-white px-6 py-2 rounded-xl text-xs font-bold shadow-md hover:bg-primary/90 transition-all active:scale-95"
+                          >
+                            Aprobar
+                          </button>
+                          <button 
+                            onClick={() => processAction("process_agent_request", { p_request_id: req.id, p_approve: false, p_note: "Denegado" }, "Solicitud rechazada")}
+                            className="bg-white text-slate-500 border border-slate-200 px-6 py-2 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all"
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'deletions' && (
               <div className="p-6">
                 <div className="space-y-4">
