@@ -3,7 +3,7 @@ create table public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null,
   phone text unique not null,
-  balance_xaf bigint not null default 0,
+  balance_xaf numeric not null default 0,
   role text not null default 'user' check (role in ('user', 'agent', 'admin')),
   agent_status text check (agent_status in ('none', 'pending', 'approved', 'rejected')),
   agent_balance_xaf numeric not null default 0,
