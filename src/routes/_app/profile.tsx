@@ -15,8 +15,11 @@ function ProfilePage() {
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [deleteReason, setDeleteReason] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -65,6 +68,22 @@ function ProfilePage() {
       toast.error(e.message);
     } finally {
       setDeleteLoading(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    if (newPassword.length < 6) return toast.error("La contraseña debe tener al menos 6 caracteres");
+    setPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success("Contraseña actualizada correctamente");
+      setShowSecurityModal(false);
+      setNewPassword("");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setPasswordLoading(false);
     }
   }
 
@@ -155,7 +174,7 @@ function ProfilePage() {
 
         <div className="rounded-2xl border border-border bg-card p-1">
           <button 
-            onClick={() => toast.info("Funcionalidad de seguridad próximamente disponible")}
+            onClick={() => setShowSecurityModal(true)}
             className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
           >
             <div className="flex items-center gap-3">
@@ -240,6 +259,44 @@ function ProfilePage() {
               </button>
               <button
                 onClick={() => setShowDeleteModal(false)}
+                className="h-12 w-full text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSecurityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <h3 className="font-display text-xl font-bold text-slate-800">Seguridad y PIN</h3>
+            <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+              Actualiza tu contraseña de acceso a Yumi Pay. Esta será tu clave para entrar y autorizar operaciones.
+            </p>
+            <div className="mt-6 space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nueva Contraseña</label>
+                <input
+                  type="password"
+                  className="mt-1 w-full h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  placeholder="Mínimo 6 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-8 flex flex-col gap-3">
+              <button
+                onClick={handlePasswordChange}
+                disabled={passwordLoading}
+                className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-lg active:scale-95 transition-transform disabled:opacity-50"
+              >
+                {passwordLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Guardar cambios"}
+              </button>
+              <button
+                onClick={() => setShowSecurityModal(false)}
                 className="h-12 w-full text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors"
               >
                 Cancelar
