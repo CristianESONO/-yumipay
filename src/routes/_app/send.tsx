@@ -76,9 +76,8 @@ function SendPage() {
     const idempotencyKey = crypto.randomUUID ? crypto.randomUUID() : `tx_${Date.now()}_${Math.random()}`;
 
     try {
-      // Tenter send_money_v2 avec sécurité PIN et idempotence
       // @ts-ignore
-      let { error } = await supabase.rpc("send_money_v2", {
+      const { data, error } = await supabase.rpc("send_money_v3", {
         p_recipient_phone: phone.trim(),
         p_amount: Math.floor(Number(amount)),
         p_pin: pin,
@@ -86,17 +85,8 @@ function SendPage() {
         p_idempotency_key: idempotencyKey,
       });
 
-      // Fallback gracieux si v2 n'est pas encore appliquée en SQL
-      if (error && error.message?.includes("send_money_v2")) {
-        const res = await supabase.rpc("send_money", {
-          p_recipient_phone: phone.trim(),
-          p_amount: Math.floor(Number(amount)),
-          p_note: note.trim() || undefined,
-        });
-        error = res.error;
-      }
-
       if (error) throw error;
+      if (!data.ok) throw new Error(data.message || "Error al procesar el pago");
 
       toast.success(`Enviado ${formatXAF(Number(amount))} con éxito`);
       navigate({ to: "/home" });

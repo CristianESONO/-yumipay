@@ -28,6 +28,7 @@ function AgentPage() {
 
   // Cash-Out state
   const [cashOutCode, setCashOutCode] = useState("");
+  const [cashOutPhone, setCashOutPhone] = useState("");
   const [cashOutLoading, setCashOutLoading] = useState(false);
   const [cashOutSuccess, setCashOutSuccess] = useState<any>(null);
 
@@ -109,20 +110,26 @@ function AgentPage() {
     if (!cashOutCode.trim() || cashOutCode.trim().length !== 6) {
       return toast.error("Introduce un código de retiro válido de 6 dígitos");
     }
+    if (!cashOutPhone.trim()) {
+      return toast.error("Introduce el número de teléfono del cliente");
+    }
 
     setCashOutLoading(true);
     setCashOutSuccess(null);
     try {
       // @ts-ignore
-      const { data, error } = await supabase.rpc("agent_execute_cash_out", {
+      const { data, error } = await supabase.rpc("agent_execute_cash_out_v3", {
         p_code: cashOutCode.trim(),
+        p_client_phone: cashOutPhone.trim(),
       });
 
       if (error) throw error;
+      if (!data.ok) throw new Error(data.message || "Error al procesar el retiro");
 
       setCashOutSuccess(data);
       toast.success(`Retiro validado. Entrega ${formatXAF((data as any).amount_to_hand_out)} en mano al cliente.`);
       setCashOutCode("");
+      setCashOutPhone("");
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Error al procesar el retiro");
@@ -289,6 +296,18 @@ function AgentPage() {
             <div>
               <h3 className="font-display font-semibold text-foreground">Validar Retiro en Efectivo</h3>
               <p className="text-xs text-muted-foreground">Pide al cliente su código de 6 dígitos para debitar su cuenta y entregarle los billetes.</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Teléfono del cliente</label>
+              <input
+                required
+                type="tel"
+                value={cashOutPhone}
+                onChange={e => setCashOutPhone(e.target.value)}
+                placeholder="+240 222 000 000"
+                className="input"
+              />
             </div>
 
             <div>

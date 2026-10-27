@@ -61,12 +61,13 @@ export function WithdrawModal({ isOpen, onClose, userBalance, onSuccess }: Withd
     setLoading(true);
     try {
       // @ts-ignore
-      const { data, error } = await supabase.rpc("request_cash_out", {
+      const { data, error } = await supabase.rpc("request_cash_out_v3", {
         p_amount: numAmount,
         p_pin: pin,
       });
 
       if (error) throw error;
+      if (!data.ok) throw new Error(data.message || "Error al solicitar retiro");
 
       setWithdrawalResult(data as any);
       setTimeLeft(900);
@@ -74,6 +75,26 @@ export function WithdrawModal({ isOpen, onClose, userBalance, onSuccess }: Withd
       onSuccess?.();
     } catch (err: any) {
       toast.error(err.message || "Error al generar código de retiro");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelCashOut = async () => {
+    if (!withdrawalResult?.code) return;
+    setLoading(true);
+    try {
+      // @ts-ignore
+      const { data, error } = await supabase.rpc("cancel_cash_out", {
+        p_code: withdrawalResult.code,
+      });
+      if (error) throw error;
+      if (!data.ok) throw new Error(data.message || "Error al cancelar el retiro");
+      toast.success("Retiro cancelado. Fondos devueltos a tu saldo.");
+      handleClose();
+      onSuccess?.();
+    } catch (err: any) {
+      toast.error(err.message || "Error al cancelar el retiro");
     } finally {
       setLoading(false);
     }
@@ -206,13 +227,21 @@ export function WithdrawModal({ isOpen, onClose, userBalance, onSuccess }: Withd
                 <span className="font-mono text-sm font-bold text-foreground">{formatTimer(timeLeft)}</span>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-6 space-y-2">
                 <button
                   type="button"
                   onClick={handleClose}
                   className="w-full rounded-2xl bg-accent py-3.5 text-sm font-bold text-foreground hover:bg-border transition"
                 >
                   Listo / Cerrar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelCashOut}
+                  disabled={loading}
+                  className="w-full rounded-2xl border border-destructive/30 py-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition"
+                >
+                  {loading ? "Cancelando..." : "Cancelar retiro y devolver fondos"}
                 </button>
               </div>
             </div>
