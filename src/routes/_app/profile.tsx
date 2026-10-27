@@ -1,25 +1,53 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Phone, Shield, LogOut, ChevronRight, Edit2, Check, X, Loader2, Trash2 } from "lucide-react";
+import { 
+  User, 
+  Shield, 
+  LogOut, 
+  ChevronRight, 
+  Edit2, 
+  Check, 
+  X, 
+  Loader2, 
+  Trash2, 
+  KeyRound, 
+  FileCheck2, 
+  AlertCircle,
+  Lock
+} from "lucide-react";
 import { toast } from "sonner";
+import { PinModal } from "@/components/PinModal";
 
 export const Route = createFileRoute("/_app/profile")({
   component: ProfilePage,
 });
 
-function ProfilePage() {
+export function ProfilePage() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<any>(null);
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Modals state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [showPinSetupModal, setShowPinSetupModal] = useState(false);
+  const [showKycModal, setShowKycModal] = useState(false);
+
+  // Form states
   const [deleteReason, setDeleteReason] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
+
+  // KYC state
+  const [docType, setDocType] = useState<"DIP" | "passport" | "residence_card">("DIP");
+  const [docNumber, setDocNumber] = useState("");
+  const [kycLoading, setKycLoading] = useState(false);
+  const [myKyc, setMyKyc] = useState<any>(null);
 
   useEffect(() => {
     loadProfile();
@@ -40,6 +68,17 @@ function ProfilePage() {
 
     setProfile(data);
     setNewName(data.full_name);
+
+    // Charger état KYC
+    const { data: kycData } = await supabase
+      .from("kyc_verifications" as any)
+      .select("*")
+      .eq("user_id", user.id)
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    setMyKyc(kycData);
   }
 
   async function handleLogout() {
@@ -96,12 +135,51 @@ function ProfilePage() {
     }
   }
 
+  async function handlePinSetup(pin: string) {
+    setPinLoading(true);
+    try {
+      // @ts-ignore
+      const { error } = await supabase.rpc("set_transaction_pin", { p_pin: pin });
+      if (error) throw error;
+      toast.success("Código PIN de 4 dígitos configurado con éxito");
+      setShowPinSetupModal(false);
+      loadProfile();
+    } catch (e: any) {
+      toast.error(e.message || "Error al configurar PIN");
+    } finally {
+      setPinLoading(false);
+    }
+  }
+
+  async function handleSubmitKyc(e: React.FormEvent) {
+    e.preventDefault();
+    if (!docNumber.trim()) return toast.error("Introduce el número de tu documento");
+    setKycLoading(true);
+    try {
+      // @ts-ignore
+      const { error } = await supabase.rpc("submit_kyc", {
+        p_doc_type: docType,
+        p_doc_number: docNumber.trim(),
+      });
+      if (error) throw error;
+      toast.success("Expediente KYC enviado para revisión bancaria");
+      setShowKycModal(false);
+      loadProfile();
+    } catch (e: any) {
+      toast.error(e.message || "Error al enviar documento KYC");
+    } finally {
+      setKycLoading(false);
+    }
+  }
+
   if (!profile) return null;
+
+  const currentTier = profile.kyc_tier || "tier_1";
 
   return (
     <div className="mx-auto max-w-md px-5 pb-8 pt-6">
       <h1 className="font-display text-2xl font-bold text-foreground">Perfil</h1>
-      <p className="mt-1 text-sm text-muted-foreground">Gestiona tu información y seguridad.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Gestiona tu información, límites y seguridad bancaria.</p>
 
       <div className="mt-8 flex flex-col items-center">
         <div className="relative">
@@ -138,13 +216,19 @@ function ProfilePage() {
             </div>
           )}
           <p className="text-sm font-medium text-muted-foreground">{profile.phone}</p>
-          <div className="mt-2 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary uppercase tracking-wider">
-            {profile.role}
+          <div className="mt-2 inline-flex items-center gap-2">
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary uppercase tracking-wider">
+              {profile.role}
+            </span>
+            <span className="rounded-full bg-accent px-3 py-1 text-xs font-bold text-foreground uppercase tracking-wider">
+              {currentTier === "tier_2" ? "KYC Nivel 2" : currentTier === "tier_3" ? "KYC Pro" : "KYC Básico"}
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-10 space-y-3">
+      <div className="mt-8 space-y-3">
+        {/* Agent request banner */}
         {profile.role === "user" && (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
             <h3 className="font-display text-sm font-bold text-primary">¿Quieres ser Agente?</h3>
@@ -181,36 +265,75 @@ function ProfilePage() {
           </div>
         )}
 
+        {/* Security & KYC Options */}
         <div className="rounded-2xl border border-border bg-card p-1">
+          {/* PIN Option */}
+          <button 
+            onClick={() => setShowPinSetupModal(true)}
+            className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
+                <KeyRound className="h-4 w-4" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold">Código PIN de Transacción</p>
+                <p className="text-[10px] text-muted-foreground">Protege tus envíos y retiros de efectivo</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold text-success uppercase tracking-widest">
+                {profile.transaction_pin_hash ? "Configurado" : "Definir"}
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </button>
+
+          {/* KYC Option */}
+          <button 
+            onClick={() => setShowKycModal(true)}
+            className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
+                <FileCheck2 className="h-4 w-4" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-semibold">Identidad y Límites (KYC BEAC)</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {currentTier === "tier_1" ? "Límite: 200.000 XAF/día" : "Límite: 2.000.000 XAF/día"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                currentTier === "tier_2" || currentTier === "tier_3" ? "text-success" : "text-primary"
+              }`}>
+                {currentTier === "tier_2" ? "Nivel 2" : currentTier === "tier_3" ? "Pro" : "Subir Nivel"}
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+          </button>
+
+          {/* Password Option */}
           <button 
             onClick={() => setShowSecurityModal(true)}
             className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
           >
             <div className="flex items-center gap-3">
               <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
-                <Shield className="h-4 w-4" />
+                <Lock className="h-4 w-4" />
               </div>
-              Seguridad y PIN
+              <div className="text-left">
+                <p className="text-sm font-semibold">Contraseña de acceso</p>
+                <p className="text-[10px] text-muted-foreground">Cambiar clave de inicio de sesión</p>
+              </div>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </button>
-          <button 
-            onClick={() => toast.info("Tu identidad está verificada (Nivel 2)")}
-            className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-sm font-medium text-foreground transition hover:bg-accent/50"
-          >
-            <div className="flex items-center gap-3">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-primary">
-                <User className="h-4 w-4" />
-              </div>
-              Verificación de identidad
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] font-bold text-success uppercase tracking-widest">Nivel 2</span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </button>
         </div>
 
+        {/* Delete account */}
         {!profile.deletion_requested ? (
           <button
             onClick={() => setShowDeleteModal(true)}
@@ -237,14 +360,94 @@ function ProfilePage() {
       
       <div className="mt-10 text-center space-y-1">
         <p className="text-[10px] text-muted-foreground uppercase tracking-[0.2em] font-bold opacity-50">
-          Yumi Pay Version 1.0.5
+          Yumi Pay Version 2.0 (Banking Standard)
         </p>
         <p className="text-[10px] text-slate-400 font-medium">
-          Developed by <span className="text-primary/70 font-bold">Ruslan Cristian ESONO MAYE</span>
+          Desarrollado por <span className="text-primary/70 font-bold">Ruslan Cristian ESONO MAYE</span>
         </p>
         <p className="text-[9px] text-slate-300 font-bold tracking-widest">INNOTECHGE</p>
       </div>
 
+      {/* PIN Setup Modal */}
+      <PinModal
+        isOpen={showPinSetupModal}
+        onClose={() => setShowPinSetupModal(false)}
+        onSuccess={handlePinSetup}
+        title="Configura tu PIN de 4 dígitos"
+        description="Este código secreto será requerido para confirmar cada envío o retiro de dinero."
+      />
+
+      {/* KYC Verification Modal */}
+      {showKycModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-[2rem] bg-white p-7 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-xl font-bold text-slate-800">Verificación de Identidad</h3>
+              <button onClick={() => setShowKycModal(false)} className="rounded-full bg-slate-100 p-1.5 text-slate-500">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+              Conforme a la normativa BEAC/COBAC, verificar tu documento oficial eleva tu límite diario de 200.000 XAF a <strong>2.000.000 XAF</strong>.
+            </p>
+
+            {myKyc?.status === "pending" ? (
+              <div className="mt-6 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-xs space-y-1">
+                <p className="font-bold text-warning-foreground">Expediente en verificación</p>
+                <p className="text-slate-600">Documento: {myKyc.doc_type} • Nº {myKyc.doc_number}</p>
+                <p className="text-[10px] text-slate-400">El equipo de cumplimiento bancario está validando tus datos.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitKyc} className="mt-6 space-y-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Documento</label>
+                  <select
+                    value={docType}
+                    onChange={(e: any) => setDocType(e.target.value)}
+                    className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 outline-none"
+                  >
+                    <option value="DIP">DIP (Documento Nacional de Identidad)</option>
+                    <option value="passport">Pasaporte Oficial</option>
+                    <option value="residence_card">Tarjeta de Residencia</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Número de Documento</label>
+                  <input
+                    required
+                    type="text"
+                    value={docNumber}
+                    onChange={(e) => setDocNumber(e.target.value)}
+                    placeholder="Ej. DIP-0019283-GE"
+                    className="mt-1 w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-800 outline-none"
+                  />
+                </div>
+
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="submit"
+                    disabled={kycLoading}
+                    className="flex h-11 w-full items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-md active:scale-95 transition-transform disabled:opacity-50"
+                  >
+                    {kycLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar Documento a Revisión"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowKycModal(false)}
+                    className="h-9 w-full text-xs font-semibold text-slate-400 hover:text-slate-600"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Account Deletion Modal */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
@@ -277,12 +480,13 @@ function ProfilePage() {
         </div>
       )}
 
+      {/* Password Change Modal */}
       {showSecurityModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-[2rem] bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
-            <h3 className="font-display text-xl font-bold text-slate-800">Seguridad y PIN</h3>
+            <h3 className="font-display text-xl font-bold text-slate-800">Contraseña de acceso</h3>
             <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              Actualiza tu contraseña de acceso a Yumi Pay. Esta será tu clave para entrar y autorizar operaciones.
+              Actualiza tu contraseña de acceso a Yumi Pay.
             </p>
             <div className="mt-6 space-y-4">
               <div>

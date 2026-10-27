@@ -20,7 +20,8 @@ import {
   LogOut,
   Wallet,
   Trash2,
-  PlusCircle
+  PlusCircle,
+  FileCheck2
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatXAF } from "@/lib/format";
@@ -31,11 +32,12 @@ export const Route = createFileRoute("/_app/admin")({
 
 function AdminPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'requests' | 'audit' | 'reversals' | 'agents' | 'deletions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'requests' | 'kyc' | 'audit' | 'reversals' | 'agents' | 'deletions'>('overview');
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [deletionRequests, setDeletionRequests] = useState<any[]>([]);
   const [auditFilter, setAuditFilter] = useState<'all' | 'p2p' | 'deposit' | 'system'>('all');
   const [requests, setRequests] = useState<any[]>([]);
+  const [kycRequests, setKycRequests] = useState<any[]>([]);
   const [auditLog, setAuditLog] = useState<any[]>([]);
   const [reversals, setReversals] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
@@ -124,10 +126,38 @@ function AdminPage() {
           .order("created_at", { ascending: false });
         setDeletionRequests(data || []);
       }
+
+      if (activeTab === 'overview' || activeTab === 'kyc') {
+        const { data } = await supabase
+          // @ts-ignore
+          .from("kyc_verifications")
+          .select("*, user:profiles!kyc_verifications_user_id_fkey(full_name, phone, kyc_tier)")
+          // @ts-ignore
+          .eq("status", "pending")
+          .order("submitted_at", { ascending: false });
+        setKycRequests(data || []);
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleReviewKyc(kycId: string, approve: boolean) {
+    try {
+      // @ts-ignore
+      const { error } = await supabase.rpc("admin_review_kyc", {
+        p_kyc_id: kycId,
+        p_approve: approve,
+        p_new_tier: "tier_2",
+        p_notes: approve ? "Documento verificado conforme por CCEI Bank" : "Documento ilegible o rechazado"
+      });
+      if (error) throw error;
+      toast.success(approve ? "Expediente KYC aprobado (Usuario elevado a Nivel 2)" : "Expediente KYC rechazado");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message);
     }
   }
 
@@ -185,7 +215,8 @@ function AdminPage() {
         <nav className="flex-1 px-4 space-y-1 mt-4">
           <SidebarLink active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<LayoutDashboard size={20}/>} label="Panel General" />
           <SidebarLink active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<Users size={20}/>} label="Todos los Usuarios" />
-          <SidebarLink active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} icon={<UserPlus size={20}/>} label="Solicitudes" count={requests.length} />
+          <SidebarLink active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} icon={<UserPlus size={20}/>} label="Solicitudes Agente" count={requests.length} />
+          <SidebarLink active={activeTab === 'kyc'} onClick={() => setActiveTab('kyc')} icon={<FileCheck2 size={20}/>} label="Validación KYC" count={kycRequests.length} />
           <SidebarLink active={activeTab === 'agents'} onClick={() => setActiveTab('agents')} icon={<Wallet size={20}/>} label="Recargar Agentes" />
           <SidebarLink active={activeTab === 'audit'} onClick={() => setActiveTab('audit')} icon={<History size={20}/>} label="Auditoría Global" />
           <SidebarLink active={activeTab === 'reversals'} onClick={() => setActiveTab('reversals')} icon={<AlertTriangle size={20}/>} label="Reclamaciones" count={reversals.length} />
@@ -216,6 +247,7 @@ function AdminPage() {
             {activeTab === 'overview' && "Resumen Ejecutivo"}
             {activeTab === 'users' && "Todos los Usuarios"}
             {activeTab === 'requests' && "Gestión de Agentes"}
+            {activeTab === 'kyc' && "Validación de Documentos KYC (BEAC / COBAC)"}
             {activeTab === 'agents' && "Recargar Float de Agentes"}
             {activeTab === 'audit' && "Auditoría de Transacciones"}
             {activeTab === 'reversals' && "Resolución de Disputas"}
@@ -540,6 +572,63 @@ function AdminPage() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'kyc' && (
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="font-display font-bold text-slate-800">Expedientes KYC Pendientes de Verificación</h3>
+                  <p className="text-xs text-slate-400 mt-1">Conforme a la normativa BEAC/COBAC, aprueba la documentación oficial para elevar los límites transaccionales.</p>
+                </div>
+                <span className="text-xs font-bold px-3 py-1 bg-primary/10 text-primary rounded-full">
+                  {kycRequests.length} solicitudes
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {kycRequests.length === 0 && (
+                  <div className="text-center py-12 text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    No hay solicitudes de verificación KYC pendientes de revisión.
+                  </div>
+                )}
+                {kycRequests.map((req) => (
+                  <div key={req.id} className="flex flex-col md:flex-row md:items-center justify-between p-5 bg-white rounded-2xl border border-slate-200 hover:border-primary/30 transition-all gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary grid place-items-center font-bold text-sm shrink-0">
+                        <FileCheck2 size={24} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-slate-800 text-sm">{req.user?.full_name}</p>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {req.doc_type}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">Nº Documento: <strong className="text-slate-700">{req.doc_number}</strong></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Telf: {req.user?.phone} • Enviado el: {new Date(req.submitted_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => handleReviewKyc(req.id, true)}
+                        className="h-9 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition shadow-sm"
+                      >
+                        Aprobar (Nivel 2)
+                      </button>
+                      <button
+                        onClick={() => handleReviewKyc(req.id, false)}
+                        className="h-9 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold transition"
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

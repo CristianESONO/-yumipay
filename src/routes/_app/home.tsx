@@ -4,12 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { ArrowUpRight, ArrowDownLeft, Plus, Send, Eye, EyeOff } from "lucide-react";
 import { formatXAF, initials } from "@/lib/format";
 import { TransactionDetail } from "@/components/TransactionDetail";
+import { WithdrawModal } from "@/components/WithdrawModal";
 
 export const Route = createFileRoute("/_app/home")({
   component: HomePage,
 });
 
-type Profile = { id: string; full_name: string; phone: string; balance_xaf: number };
+type Profile = { id: string; full_name: string; phone: string; balance_xaf: number; kyc_tier?: string };
 type Tx = {
   id: string;
   amount_xaf: number;
@@ -27,6 +28,7 @@ function HomePage() {
   const [txs, setTxs] = useState<Tx[]>([]);
   const [hideBalance, setHideBalance] = useState(false);
   const [selectedTx, setSelectedTx] = useState<any>(null);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
   async function load() {
     const { data: u } = await supabase.auth.getUser();
@@ -82,7 +84,12 @@ function HomePage() {
         style={{ background: "var(--gradient-card)" }}
       >
         <div className="flex items-center justify-between">
-          <p className="text-xs uppercase tracking-wider text-primary-foreground/60">Saldo disponible</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs uppercase tracking-wider text-primary-foreground/60">Saldo disponible</p>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+              {(profile as any)?.kyc_tier === "tier_2" ? "KYC Nivel 2" : (profile as any)?.kyc_tier === "tier_3" ? "KYC Pro" : "KYC Básico"}
+            </span>
+          </div>
           <button onClick={() => setHideBalance(!hideBalance)} className="text-primary-foreground/70 hover:text-primary-foreground">
             {hideBalance ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
@@ -101,10 +108,10 @@ function HomePage() {
           <Send className="h-4 w-4" /> Enviar
         </Link>
         <button
-          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-4 font-display font-semibold text-foreground active:scale-[0.98]"
-          onClick={() => alert("Pronto: recarga vía operadores móviles")}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card py-4 font-display font-semibold text-foreground shadow-sm hover:border-primary/50 transition active:scale-[0.98]"
+          onClick={() => setShowWithdrawModal(true)}
         >
-          <Plus className="h-4 w-4" /> Recargar
+          <Plus className="h-4 w-4 text-primary" /> Retirar efectivo
         </button>
       </div>
 
@@ -133,6 +140,13 @@ function HomePage() {
           onUpdate={load}
         />
       )}
+
+      <WithdrawModal
+        isOpen={showWithdrawModal}
+        onClose={() => setShowWithdrawModal(false)}
+        userBalance={profile?.balance_xaf ?? 0}
+        onSuccess={load}
+      />
     </div>
   );
 }
