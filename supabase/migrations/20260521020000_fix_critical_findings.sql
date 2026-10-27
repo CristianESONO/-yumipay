@@ -3,28 +3,31 @@
 -- Résolution exhaustive des 7 points d'audit de sécurité bancaire
 -- ============================================================================
 
--- 1. CRÉATION DU COMPTE SYSTÈME BANCAIRE POUR LES FRAIS (SYSTÈME DE LEDGER FERMÉ)
--- UUID réservé pour le compte de réserve bancaire de Yumi Pay
-do $$
-begin
-  if not exists (select 1 from auth.users where id = '00000000-0000-0000-0000-000000000000') then
-    -- On crée une entrée sécurisée pour le pool bancaire dans profiles
-    insert into public.profiles (
-      id, full_name, phone, role, balance_xaf, agent_balance_xaf, kyc_tier
-    ) values (
-      '00000000-0000-0000-0000-000000000000',
-      'Yumi Bank Revenue & Fee Pool',
-      '+240000000000',
-      'admin',
-      0,
-      0,
-      'tier_3'
-    ) on conflict (id) do nothing;
-  end if;
-end;
-$$;
+-- 1. CRÉATION DE LA TABLE DES COMPTES SYSTÈME BANCAIRE (POOL DES FRAIS)
+-- Évite de violer la clé étrangère auth.users -> profiles
+create table if not exists public.system_accounts (
+  id text primary key,
+  name text not null,
+  balance_xaf numeric not null default 0 check (balance_xaf >= 0),
+  updated_at timestamptz not null default now()
+);
 
--- 2. CONTRAINTES D'INTÉGRITÉ STRICTES (EMPÊCHER LES SOLDES NÉGATIFS ET MONTANTS INVALIDES)
+alter table public.system_accounts enable row level security;
+drop policy if exists "Admins view system accounts" on public.system_accounts;
+create policy "Admins view system accounts" on public.system_accounts for select to authenticated
+  using (exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
+
+insert into public.system_accounts (id, name, balance_xaf)
+values ('bank_fee_pool', 'Yumi Bank Revenue & Fee Pool', 0)
+on conflict (id) do nothing;
+
+-- 2. AJUSTEMENT DU GRAND LIVRE POUR SUPPORTER LES COMPTES SYSTÈME
+-- Permet au ledger de pointer soit vers un profil utilisateur, soit vers un compte système
+alter table public.ledger_entries drop constraint if exists ledger_entries_account_id_fkey;
+alter table public.ledger_entries alter column account_id drop not null;
+alter table public.ledger_entries add column if not exists system_account_id text references public.system_accounts(id);
+
+-- 3. CONTRAINTES D'INTÉGRITÉ STRICTES (EMPÊCHER LES SOLDES NÉGATIFS ET MONTANTS INVALIDES)
 alter table public.profiles drop constraint if exists profiles_balance_positive;
 alter table public.profiles add constraint profiles_balance_positive 
   check (balance_xaf >= 0 and agent_balance_xaf >= 0);
@@ -38,12 +41,11 @@ alter table public.ledger_entries add constraint ledger_amount_positive
   check (amount_xaf > 0);
 
 -- Unicité stricte sur idempotency_key par utilisateur
-alter table public.transactions drop constraint if exists transactions_sender_idempotency_uniq;
+drop index if exists transactions_sender_idempotency_idx;
 create unique index if not exists transactions_sender_idempotency_idx 
   on public.transactions(sender_id, idempotency_key) where idempotency_key is not null;
 
--- 3. VERROUILLAGE RLS SUR LA TABLE PROFILES (PROTECTION CONTRE L'ÉLÉVATION DE PRIVILÈGES)
--- Un utilisateur ne peut JAMAIS modifier lui-même son rôle, ses soldes, son gel ou son kyc
+-- 4. VERROUILLAGE RLS SUR LA TABLE PROFILES (PROTECTION CONTRE L'ÉLÉVATION DE PRIVILÈGES)
 create or replace function public.protect_sensitive_profile_fields()
 returns trigger
 language plpgsql
@@ -71,11 +73,10 @@ create trigger trg_protect_profile_fields
 before update on public.profiles
 for each row execute function public.protect_sensitive_profile_fields();
 
--- 4. TABLE DU SÉQUESTRE DE RETRAIT D'ESPÈCES (HOLD / ESCROW TEMPORAIRE)
--- Lors de la demande de retrait, les fonds sont retirés du solde actif et placés en séquestre
+-- 5. SÉQUESTRE DE RETRAIT D'ESPÈCES (HOLD / ESCROW TEMPORAIRE)
 alter table public.withdrawal_codes add column if not exists held_amount_xaf numeric;
 
--- 5. FONCTION PIN ÉTANCHE SANS ROLLBACK (PERSISTENCE DU COMPTEUR D'ÉCHECS)
+-- 6. FONCTION PIN ÉTANCHE SANS ROLLBACK (PERSISTENCE DU COMPTEUR D'ÉCHECS)
 create or replace function public.check_user_pin_safe(p_user_id uuid, p_pin text)
 returns json
 language plpgsql
@@ -108,7 +109,6 @@ begin
     return json_build_object('ok', false, 'status', 'NO_PIN', 'message', 'Debes configurar un código PIN antes de realizar operaciones.');
   end if;
 
-  -- Test du code PIN
   if v_stored_hash = crypt(p_pin, v_stored_hash) then
     update public.profiles 
     set failed_pin_attempts = 0, pin_locked_until = null 
@@ -129,10 +129,9 @@ begin
   end if;
 end;
 $$;
--- Révoquer l'accès public direct à cette fonction interne pour éviter l'énumération par un tiers
 revoke execute on function public.check_user_pin_safe(uuid, text) from public, anon;
 
--- 6. FONCTION FINANCIÈRE DE TRANSFERT P2P ROBUSTE & ÉQUILIBRÉE EN LEDGER
+-- 7. FONCTION FINANCIÈRE DE TRANSFERT P2P ROBUSTE & ÉQUILIBRÉE EN LEDGER
 create or replace function public.send_money_v3(
   p_recipient_phone text,
   p_amount numeric,
@@ -158,7 +157,6 @@ declare
   v_pin_res json;
   v_existing_tx public.transactions;
   v_tx_id uuid;
-  v_system_account uuid := '00000000-0000-0000-0000-000000000000';
 begin
   -- 1. Garde d'authentification impérative
   if v_sender is null then
@@ -247,8 +245,11 @@ begin
   -- 9. Mouvements atomiques des soldes
   update public.profiles set balance_xaf = balance_xaf - v_total_deduction where id = v_sender;
   update public.profiles set balance_xaf = balance_xaf + p_amount where id = v_recipient;
+  
   if v_fee > 0 then
-    update public.profiles set balance_xaf = balance_xaf + v_fee where id = v_system_account;
+    update public.system_accounts 
+    set balance_xaf = balance_xaf + v_fee, updated_at = now() 
+    where id = 'bank_fee_pool';
   end if;
 
   -- 10. Enregistrement de la transaction
@@ -260,17 +261,17 @@ begin
 
   -- 11. GRAND LIVRE COMPTABLE EN PARTIE DOUBLE (Écart rigoureusement égal à 0)
   -- Débit Émetteur : p_amount + v_fee
-  insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-  values (v_tx_id, v_sender, 'personal', 'debit', v_total_deduction, v_sender_balance - v_total_deduction, 'Transfert P2P vers ' || p_recipient_phone);
+  insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+  values (v_tx_id, v_sender, null, 'personal', 'debit', v_total_deduction, v_sender_balance - v_total_deduction, 'Transfert P2P vers ' || p_recipient_phone);
 
   -- Crédit Destinataire : p_amount
-  insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-  values (v_tx_id, v_recipient, 'personal', 'credit', p_amount, v_recipient_balance + p_amount, 'Transfert reçu de ' || v_sender);
+  insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+  values (v_tx_id, v_recipient, null, 'personal', 'credit', p_amount, v_recipient_balance + p_amount, 'Transfert reçu de ' || v_sender);
 
   -- Crédit Compte Frais Système : v_fee (s'il y a lieu)
   if v_fee > 0 then
-    insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-    values (v_tx_id, v_system_account, 'bank_fee_pool', 'credit', v_fee, (select balance_xaf from public.profiles where id = v_system_account), 'Comisión transferencia P2P');
+    insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+    values (v_tx_id, null, 'bank_fee_pool', 'bank_fee_pool', 'credit', v_fee, (select balance_xaf from public.system_accounts where id = 'bank_fee_pool'), 'Comisión transferencia P2P');
   end if;
 
   return json_build_object(
@@ -285,7 +286,7 @@ end;
 $$;
 grant execute on function public.send_money_v3(text, numeric, text, text, text) to authenticated;
 
--- 7. CASH-OUT BLINDÉ AVEC SÉQUESTRE IMMÉDIAT (ÉVITER LE DOUBLE RETRAIT)
+-- 8. CASH-OUT BLINDÉ AVEC SÉQUESTRE IMMÉDIAT (ÉVITER LE DOUBLE RETRAIT)
 create or replace function public.request_cash_out_v2(p_amount numeric, p_pin text)
 returns json
 language plpgsql
@@ -354,7 +355,7 @@ end;
 $$;
 grant execute on function public.request_cash_out_v2(numeric, text) to authenticated;
 
--- 8. VALIDATION DU RETRAIT PAR L'AGENT AVEC DÉNOUEMENT DU SÉQUESTRE
+-- 9. VALIDATION DU RETRAIT PAR L'AGENT AVEC DÉNOUEMENT DU SÉQUESTRE
 create or replace function public.agent_execute_cash_out_v2(p_code text)
 returns json
 language plpgsql
@@ -368,7 +369,6 @@ declare
   v_wcode public.withdrawal_codes;
   v_tx_id uuid;
   v_client_name text;
-  v_system_account uuid := '00000000-0000-0000-0000-000000000000';
   v_bank_fee numeric;
 begin
   select role, agent_balance_xaf into v_agent_role, v_agent_float
@@ -400,9 +400,11 @@ begin
       agent_commission_earned_xaf = agent_commission_earned_xaf + v_wcode.agent_commission_xaf
   where id = v_agent_id;
 
-  -- 2. Créditer la part de commission banque
+  -- 2. Créditer la part de commission banque sur system_accounts
   if v_bank_fee > 0 then
-    update public.profiles set balance_xaf = balance_xaf + v_bank_fee where id = v_system_account;
+    update public.system_accounts 
+    set balance_xaf = balance_xaf + v_bank_fee, updated_at = now() 
+    where id = 'bank_fee_pool';
   end if;
 
   -- 3. Marquer le code comme terminé
@@ -418,17 +420,17 @@ begin
 
   -- 5. Grand livre en partie double parfait
   -- Débit client (séquestré) : amount + fee
-  insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-  values (v_tx_id, v_wcode.user_id, 'personal', 'debit', v_wcode.held_amount_xaf, (select balance_xaf from public.profiles where id = v_wcode.user_id), 'Retrait espèces chez agent');
+  insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+  values (v_tx_id, v_wcode.user_id, null, 'personal', 'debit', v_wcode.held_amount_xaf, (select balance_xaf from public.profiles where id = v_wcode.user_id), 'Retrait espèces chez agent');
 
   -- Crédit Float Agent : amount + commission
-  insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-  values (v_tx_id, v_agent_id, 'agent_float', 'credit', v_wcode.amount_xaf + v_wcode.agent_commission_xaf, v_agent_float + v_wcode.amount_xaf + v_wcode.agent_commission_xaf, 'Recouvrement retrait + commission');
+  insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+  values (v_tx_id, v_agent_id, null, 'agent_float', 'credit', v_wcode.amount_xaf + v_wcode.agent_commission_xaf, v_agent_float + v_wcode.amount_xaf + v_wcode.agent_commission_xaf, 'Recouvrement retrait + commission');
 
   -- Crédit Banque : commission restante
   if v_bank_fee > 0 then
-    insert into public.ledger_entries (transaction_id, account_id, wallet_type, direction, amount_xaf, balance_after, description)
-    values (v_tx_id, v_system_account, 'bank_fee_pool', 'credit', v_bank_fee, (select balance_xaf from public.profiles where id = v_system_account), 'Part frais retrait Yumi Bank');
+    insert into public.ledger_entries (transaction_id, account_id, system_account_id, wallet_type, direction, amount_xaf, balance_after, description)
+    values (v_tx_id, null, 'bank_fee_pool', 'bank_fee_pool', 'credit', v_bank_fee, (select balance_xaf from public.system_accounts where id = 'bank_fee_pool'), 'Part frais retrait Yumi Bank');
   end if;
 
   return json_build_object(
