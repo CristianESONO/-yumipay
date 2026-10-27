@@ -72,16 +72,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Yumi Pay — Envía dinero al instante" },
-      { name: "description", content: "Plataforma de envío de dinero entre usuarios en Guinea Ecuatorial. Rápido, seguro y desde tu móvil." },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" },
+      { title: "Yumi Pay — Mobile Money & Pagos Instantáneos" },
+      { name: "description", content: "Plataforma de pagos y transferencias móviles en Guinea Ecuatorial. Rápido, seguro y desde tu móvil." },
+      { name: "theme-color", content: "#0c1533" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Yumi Pay" },
+      { name: "application-name", content: "Yumi Pay" },
       { property: "og:title", content: "Yumi Pay" },
-      { property: "og:description", content: "Envía dinero al instante en Guinea Ecuatorial" },
+      { property: "og:description", content: "Envía y retira dinero al instante en Guinea Ecuatorial" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "icon", type: "image/svg+xml", href: "/icons/icon-192.svg" },
+      { rel: "apple-touch-icon", href: "/icons/icon-192.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700&display=swap" },
@@ -99,7 +107,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="es">
       <head>
         <HeadContent />
       </head>
@@ -112,11 +120,21 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 import { useLocation } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const location = useLocation();
   const isAdmin = location.pathname === "/admin";
+
+  useEffect(() => {
+    // Enregistrer le Service Worker pour la PWA
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((err) => {
+        console.warn("SW registration skipped:", err);
+      });
+    }
+  }, []);
 
   if (isAdmin) {
     return (

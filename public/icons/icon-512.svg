@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="yumiGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c1533" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <linearGradient id="accentGrad512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#yumiGrad512)" />
+  
+  <!-- Subtle circular rings -->
+  <circle cx="256" cy="256" r="170" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4" />
+  <circle cx="256" cy="256" r="120" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="2" />
+
+  <!-- Modern Stylized "Y" Emblem -->
+  <path d="M 160 150 L 256 272 L 256 368" stroke="#ffffff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M 352 150 L 256 272" stroke="url(#accentGrad512)" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+  <!-- Digital money dot -->
+  <circle cx="358" cy="144" r="18" fill="#38bdf8" />
+</svg>

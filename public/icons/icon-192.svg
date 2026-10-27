@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="yumiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c1533" />
+      <stop offset="100%" stop-color="#1e3a8a" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#2563eb" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners for adaptive icons -->
+  <rect width="192" height="192" rx="42" fill="url(#yumiGrad)" />
+  
+  <!-- Subtle circular glow -->
+  <circle cx="96" cy="96" r="64" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" />
+  
+  <!-- Modern Stylized "Y" Emblem -->
+  <path d="M 60 56 L 96 102 L 96 138" stroke="#ffffff" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M 132 56 L 96 102" stroke="url(#accentGrad)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  
+  <!-- Digital money dot -->
+  <circle cx="134" cy="54" r="7" fill="#38bdf8" />
+</svg>
