@@ -46,7 +46,11 @@ function AgentPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
-    const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, balance_xaf, agent_balance_xaf, agent_commission_earned_xaf, role, agent_status, kyc_tier, created_at, is_frozen, frozen_reason, deletion_requested, deletion_reason, pin_set")
+      .eq("id", user.id)
+      .single();
     if (!profile || (profile.role !== "agent" && profile.role !== "admin")) {
       navigate({ to: "/home" as any });
       return;

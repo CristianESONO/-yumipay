@@ -17,7 +17,7 @@ function Index() {
         <div className="absolute -top-32 -right-20 h-80 w-80 rounded-full bg-primary-glow/40 blur-3xl" />
         <div className="absolute -bottom-40 -left-20 h-80 w-80 rounded-full bg-primary-glow/30 blur-3xl" />
 
-        <div className="relative mx-auto max-w-md px-6 pb-16 pt-10">
+        <div className="relative mx-auto max-w-md px-6 pb-16 pt-[max(env(safe-area-inset-top),2.5rem)]">
           <div className="flex items-center gap-2">
             <div className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 backdrop-blur">
               <span className="font-display text-lg font-bold">Y</span>

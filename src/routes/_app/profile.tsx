@@ -57,7 +57,11 @@ export function ProfilePage() {
   async function loadProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, balance_xaf, agent_balance_xaf, agent_commission_earned_xaf, role, agent_status, kyc_tier, created_at, is_frozen, frozen_reason, deletion_requested, deletion_reason, pin_set")
+      .eq("id", user.id)
+      .maybeSingle();
     
     if (error || !data) {
       console.error("Error al cargar perfil:", error);

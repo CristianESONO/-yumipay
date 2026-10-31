@@ -108,9 +108,9 @@ function QRPage() {
                   level="H"
                   includeMargin={false}
                   imageSettings={{
-                    src: "/placeholder.svg",
-                    height: 40,
-                    width: 40,
+                    src: "/icons/icon-192.svg",
+                    height: 38,
+                    width: 38,
                     excavate: true,
                   }}
                 />

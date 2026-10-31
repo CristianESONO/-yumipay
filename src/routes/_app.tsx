@@ -67,7 +67,7 @@ function AppLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-24 pt-[max(env(safe-area-inset-top),0.75rem)]">
       <Outlet />
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur-xl">

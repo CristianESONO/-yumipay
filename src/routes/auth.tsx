@@ -78,8 +78,8 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-12">
-      <div className="mx-auto max-w-md px-6 pt-6">
+    <div className="min-h-screen bg-background pb-12 pt-[max(env(safe-area-inset-top),1.5rem)]">
+      <div className="mx-auto max-w-md px-6 pt-2">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Atrás
         </Link>

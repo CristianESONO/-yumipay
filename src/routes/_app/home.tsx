@@ -33,7 +33,11 @@ function HomePage() {
   async function load() {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { data: p } = await supabase.from("profiles").select("*").eq("id", u.user.id).maybeSingle();
+    const { data: p } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone, balance_xaf, agent_balance_xaf, agent_commission_earned_xaf, role, agent_status, kyc_tier, created_at, is_frozen, frozen_reason, deletion_requested, deletion_reason, pin_set")
+      .eq("id", u.user.id)
+      .maybeSingle();
     setProfile(p as Profile | null);
     const { data: t } = await supabase
       .from("transactions")

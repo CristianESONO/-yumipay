@@ -138,7 +138,7 @@ function AdminPage() {
       if (activeTab === 'deletions') {
         const { data } = await supabase
           .from("profiles")
-          .select("*")
+          .select("id, full_name, phone, role, agent_status, balance_xaf, agent_balance_xaf, created_at, deletion_requested, deletion_reason")
           // @ts-ignore
           .eq("deletion_requested", true)
           .order("created_at", { ascending: false });
