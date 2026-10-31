@@ -1,0 +1,4 @@
+# crontab -e  puis coller la ligne (ajuster le chemin si besoin).
+# Toutes les minutes : restitue les fonds des codes de retrait expirés.
+
+* * * * * cd /home/ruslan/apps/yumipay && /usr/bin/node scripts/expire-cashouts.mjs >> /home/ruslan/apps/yumipay/logs/expire.log 2>&1

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/_app/agent")({
 });
 
 function AgentPage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"deposit" | "withdraw">("deposit");
   const [phone, setPhone] = useState("");
   const [depositAmount, setDepositAmount] = useState<number | "">("");
@@ -46,11 +47,15 @@ function AgentPage() {
     if (!user) return;
     
     const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+    if (!profile || (profile.role !== "agent" && profile.role !== "admin")) {
+      navigate({ to: "/home" as any });
+      return;
+    }
     setAgentProfile(profile);
 
     const { data: txs } = await supabase
       .from("transactions")
-      .select("*, recipient:profiles!transactions_recipient_id_fkey(full_name, phone)")
+      .select("id, type, amount_xaf, note, recipient_phone, recipient_name")
       .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
       .order("created_at", { ascending: false })
       .limit(6);
@@ -86,13 +91,16 @@ function AgentPage() {
     setDepositLoading(true);
     try {
       // @ts-ignore
-      const { error } = await supabase.rpc("agent_deposit", {
+      const { data, error } = await supabase.rpc("agent_deposit_v2", {
         p_recipient_phone: phone.trim(),
-        p_amount: Number(depositAmount),
+        p_amount: Math.floor(Number(depositAmount)),
         p_note: "Recarga en punto Yumi"
       });
 
       if (error) throw error;
+      if (data && (data as { ok?: boolean }).ok === false) {
+        throw new Error((data as { message?: string }).message || "Error al recargar al cliente");
+      }
 
       toast.success(`Recarga de ${formatXAF(Number(depositAmount))} completada`);
       setPhone("");
@@ -374,7 +382,7 @@ function AgentPage() {
                   <p className="text-sm font-semibold text-foreground">
                     {tx.type === "withdrawal" ? "Retiro pagado" : "Recarga a cliente"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">{tx.recipient?.phone || tx.note}</p>
+                  <p className="text-[10px] text-muted-foreground">{tx.recipient_phone || tx.note}</p>
                 </div>
               </div>
               <p className="font-display font-bold text-foreground">

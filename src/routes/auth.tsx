@@ -17,7 +17,6 @@ function AuthPage() {
   const navigate = useNavigate();
   const { mode: initialMode } = Route.useSearch();
   const [mode, setMode] = useState<"signup" | "login">(initialMode ?? "signup");
-  const [role, setRole] = useState<"user" | "agent">("user");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -58,11 +57,11 @@ function AuthPage() {
           password,
           options: {
             emailRedirectTo: window.location.origin + "/home",
-            data: { full_name: fullName, phone, role },
+            data: { full_name: fullName, phone },
           },
         });
         if (error) throw error;
-        toast.success(role === 'agent' ? "¡Cuenta de Agente creada!" : "¡Cuenta creada! Bienvenido a Yumi.");
+        toast.success("¡Cuenta creada! Bienvenido a Yumi.");
         if (data.user) handleRedirect(data.user.id);
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -91,31 +90,10 @@ function AuthPage() {
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {mode === "signup"
-              ? role === 'agent' 
-                ? "Empieza a gestionar recargas y ganar comisiones hoy mismo."
-                : "Comienza con 50 000 XAF de bono de bienvenida."
+              ? "Regístrate con tu nombre y teléfono. El rol de agente se solicita después, desde tu perfil."
               : "Inicia sesión para gestionar tu dinero."}
           </p>
         </div>
-
-        {mode === "signup" && (
-          <div className="mt-6 flex gap-1 rounded-2xl bg-accent/50 p-1">
-            <button
-              type="button"
-              onClick={() => setRole("user")}
-              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition ${role === 'user' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
-            >
-              Cliente
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("agent")}
-              className={`flex-1 py-3 rounded-xl text-xs font-bold uppercase transition ${role === 'agent' ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}
-            >
-              Agente
-            </button>
-          </div>
-        )}
 
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
           {mode === "signup" && (
@@ -169,7 +147,7 @@ function AuthPage() {
             className="mt-2 inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary font-display text-base font-semibold text-primary-foreground shadow-[var(--shadow-card)] transition active:scale-[0.98] disabled:opacity-60"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === "signup" ? (role === 'agent' ? 'Abrir Punto Yumi' : 'Crear cuenta') : "Iniciar sesión"}
+            {mode === "signup" ? "Crear cuenta" : "Iniciar sesión"}
           </button>
         </form>
 

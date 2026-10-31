@@ -34,6 +34,7 @@ export function ProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showPinSetupModal, setShowPinSetupModal] = useState(false);
+  const [pinOld, setPinOld] = useState<string | null>(null);
   const [showKycModal, setShowKycModal] = useState(false);
 
   // Form states
@@ -136,16 +137,29 @@ export function ProfilePage() {
   }
 
   async function handlePinSetup(pin: string) {
+    const needsOld = Boolean(profile?.pin_set);
+    if (needsOld && !pinOld) {
+      setPinOld(pin);
+      return;
+    }
     setPinLoading(true);
     try {
       // @ts-ignore
-      const { error } = await supabase.rpc("set_transaction_pin", { p_pin: pin });
+      const { data, error } = await supabase.rpc("set_transaction_pin", {
+        p_new_pin: pin,
+        p_old_pin: pinOld ?? undefined,
+      });
       if (error) throw error;
+      if (data && (data as { ok?: boolean }).ok === false) {
+        throw new Error((data as { message?: string }).message || "Error al configurar PIN");
+      }
       toast.success("Código PIN de 4 dígitos configurado con éxito");
       setShowPinSetupModal(false);
+      setPinOld(null);
       loadProfile();
     } catch (e: any) {
       toast.error(e.message || "Error al configurar PIN");
+      setPinOld(null);
     } finally {
       setPinLoading(false);
     }
@@ -283,7 +297,7 @@ export function ProfilePage() {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-bold text-success uppercase tracking-widest">
-                {profile.transaction_pin_hash ? "Configurado" : "Definir"}
+                {profile.pin_set ? "Configurado" : "Definir"}
               </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
@@ -371,10 +385,17 @@ export function ProfilePage() {
       {/* PIN Setup Modal */}
       <PinModal
         isOpen={showPinSetupModal}
-        onClose={() => setShowPinSetupModal(false)}
+        onClose={() => {
+          setShowPinSetupModal(false);
+          setPinOld(null);
+        }}
         onSuccess={handlePinSetup}
-        title="Configura tu PIN de 4 dígitos"
-        description="Este código secreto será requerido para confirmar cada envío o retiro de dinero."
+        title={profile.pin_set && !pinOld ? "PIN actual" : "Configura tu PIN de 4 dígitos"}
+        description={
+          profile.pin_set && !pinOld
+            ? "Introduce tu PIN actual para poder cambiarlo."
+            : "Este código secreto será requerido para confirmar cada envío o retiro de dinero."
+        }
       />
 
       {/* KYC Verification Modal */}

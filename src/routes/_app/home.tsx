@@ -37,33 +37,38 @@ function HomePage() {
     setProfile(p as Profile | null);
     const { data: t } = await supabase
       .from("transactions")
-      .select("id, amount_xaf, note, created_at, sender_id, recipient_id, status, sender:profiles!transactions_sender_id_fkey(full_name), recipient:profiles!transactions_recipient_id_fkey(full_name)")
+      .select("id, amount_xaf, note, created_at, sender_id, recipient_id, status, sender_name, recipient_name")
       .order("created_at", { ascending: false })
       .limit(5);
     setTxs((t as unknown as Tx[]) ?? []);
   }
 
   useEffect(() => {
-    load();
+    let channel: ReturnType<typeof supabase.channel> | undefined;
+    let cancelled = false;
 
-    // Subscribe to real-time changes on the profile
-    const channel = supabase
-      .channel("profile-updates")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "profiles" },
-        (payload) => {
-          if (profile && payload.new.id === profile.id) {
+    async function init() {
+      await load();
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user || cancelled) return;
+      channel = supabase
+        .channel("profile-updates")
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${u.user.id}` },
+          (payload) => {
             setProfile(payload.new as Profile);
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
+    }
 
+    init();
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
-  }, [profile?.id]);
+  }, []);
 
   return (
     <div className="mx-auto max-w-md px-5 pb-8 pt-6">
@@ -153,7 +158,9 @@ function HomePage() {
 
 export function TxRow({ tx, meId, onClick }: { tx: any; meId: string; onClick?: () => void }) {
   const outgoing = tx.sender_id === meId;
-  const other = outgoing ? tx.recipient?.full_name : tx.sender?.full_name;
+  const other = outgoing
+    ? (tx.recipient_name ?? tx.recipient?.full_name)
+    : (tx.sender_name ?? tx.sender?.full_name);
   return (
     <button 
       onClick={onClick}

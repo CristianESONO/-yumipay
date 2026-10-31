@@ -44,6 +44,9 @@ function AdminPage() {
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [topUpAmount, setTopUpAmount] = useState<string>('');
   const [topUpLoading, setTopUpLoading] = useState(false);
+  const [fundAmount, setFundAmount] = useState<string>('');
+  const [fundLoading, setFundLoading] = useState(false);
+  const [bankReserve, setBankReserve] = useState<number>(0);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +57,21 @@ function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getUser();
+      if (!sessionData.user) return;
+      const { data: me } = await supabase.from("profiles").select("role").eq("id", sessionData.user.id).single();
+      if ((me as { role?: string } | null)?.role !== "admin") {
+        navigate({ to: "/home" as any });
+        return;
+      }
+
+      const { data: reserveRow } = await supabase
+        .from("system_accounts" as any)
+        .select("balance_xaf")
+        .eq("id", "bank_reserve")
+        .maybeSingle();
+      setBankReserve(Number((reserveRow as { balance_xaf?: number } | null)?.balance_xaf || 0));
+
       const { data: profiles } = await supabase.from("profiles").select("balance_xaf, role, agent_balance_xaf");
       const totalBalance = profiles?.reduce((sum: number, p: any) => sum + Number(p.balance_xaf) + Number(p.agent_balance_xaf || 0), 0) || 0;
       setStats({ 
@@ -168,11 +186,14 @@ function AdminPage() {
     setTopUpLoading(true);
     try {
       // @ts-ignore
-      const { error } = await supabase.rpc("admin_top_up_agent", {
+      const { data, error } = await supabase.rpc("admin_top_up_agent", {
         p_agent_id: selectedAgent,
         p_amount: amount,
       });
       if (error) throw error;
+      if (data && (data as { ok?: boolean }).ok === false) {
+        throw new Error((data as { message?: string }).message || "Error al recargar el float");
+      }
       toast.success(`Float recargado con ${formatXAF(amount)}`);
       setTopUpAmount('');
       setSelectedAgent('');
@@ -181,6 +202,26 @@ function AdminPage() {
       toast.error(e.message || "Error al recargar el float");
     } finally {
       setTopUpLoading(false);
+    }
+  }
+
+  async function handleFundReserve() {
+    const amount = Number(fundAmount);
+    if (!amount || amount <= 0) return toast.error("Introduce un monto válido");
+    setFundLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("admin_fund_reserve" as any, { p_amount: amount });
+      if (error) throw error;
+      if (data && (data as { ok?: boolean }).ok === false) {
+        throw new Error((data as { message?: string }).message || "Error al registrar el depósito");
+      }
+      toast.success(`Reserva incrementada en ${formatXAF(amount)}`);
+      setFundAmount("");
+      loadData();
+    } catch (e: any) {
+      toast.error(e.message || "Error al registrar el depósito bancario");
+    } finally {
+      setFundLoading(false);
     }
   }
 
@@ -499,6 +540,32 @@ function AdminPage() {
           {activeTab === 'agents' && (
             <div className="p-6 space-y-6">
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <h3 className="font-display font-bold text-slate-800 mb-1">Depósito al cantonnement</h3>
+                <p className="text-xs text-slate-400 mb-2">
+                  Registra el efectivo recibido en el banco antes de recargar el float de un agente. Reserva disponible:{" "}
+                  <span className="font-bold text-slate-700">{formatXAF(bankReserve)}</span>
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mb-8">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-500 mb-2">Monto recibido (XAF)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Ej: 500000"
+                      value={fundAmount}
+                      onChange={(e) => setFundAmount(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={handleFundReserve}
+                    disabled={fundLoading}
+                    className="flex items-center justify-center gap-2 h-11 px-6 rounded-xl bg-slate-800 text-white text-sm font-bold hover:bg-slate-700 transition-colors disabled:opacity-60"
+                  >
+                    {fundLoading ? <Loader2 size={16} className="animate-spin" /> : <PlusCircle size={16} />}
+                    Registrar depósito
+                  </button>
+                </div>
                 <h3 className="font-display font-bold text-slate-800 mb-1">Recargar Float de Agente</h3>
                 <p className="text-xs text-slate-400 mb-6">Aumenta el saldo de caja (Float) de un agente para que pueda realizar depósitos a clientes.</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">

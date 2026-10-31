@@ -8,11 +8,15 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "cap:sync": "cap sync",
     "cap:open": "cap open android",
     "cap:build": "npm run build && cap sync android"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
@@ -60,6 +64,7 @@
     "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
+    "nitro": "^3.0.260903-beta",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
@@ -68,6 +73,7 @@
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
+    "srvx": "^1.0.8",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
     "tw-animate-css": "^1.3.4",

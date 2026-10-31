@@ -21,7 +21,7 @@ function HistoryPage() {
     setMeId(u.user.id);
     const { data } = await supabase
       .from("transactions")
-      .select("id, amount_xaf, note, created_at, sender_id, recipient_id, status, sender:profiles!transactions_sender_id_fkey(full_name), recipient:profiles!transactions_recipient_id_fkey(full_name)")
+      .select("id, amount_xaf, note, created_at, sender_id, recipient_id, status, sender_name, recipient_name")
       .order("created_at", { ascending: false });
     setTxs((data as unknown as Tx[]) ?? []);
   };

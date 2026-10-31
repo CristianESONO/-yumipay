@@ -1,0 +1,11 @@
+node_modules
+dist
+.output
+.wrangler
+.git
+android
+documentacion
+tmp_list_users.mjs
+.env
+.env.local
+*.md

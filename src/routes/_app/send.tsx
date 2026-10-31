@@ -43,17 +43,22 @@ function SendPage() {
     if (!user) return;
     const { data } = await supabase
       .from("transactions")
-      .select("recipient:profiles!transactions_recipient_id_fkey(full_name, phone)")
+      .select("recipient_name, recipient_phone")
       .eq("sender_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(10);
-    
+      .limit(20);
+
     if (data) {
-      // @ts-ignore
-      const unique = Array.from(new Set(data.filter(t => t.recipient).map((t: any) => t.recipient.phone)))
-        // @ts-ignore
-        .map(phone => data.find((t: any) => t.recipient?.phone === phone).recipient);
-      setRecents(unique.slice(0, 4));
+      const seen = new Set<string>();
+      const unique: { full_name: string; phone: string }[] = [];
+      for (const t of data as { recipient_name: string | null; recipient_phone: string | null }[]) {
+        const phone = t.recipient_phone?.trim();
+        if (!phone || seen.has(phone)) continue;
+        seen.add(phone);
+        unique.push({ full_name: t.recipient_name || "Usuario", phone });
+        if (unique.length >= 4) break;
+      }
+      setRecents(unique);
     }
   }
 
